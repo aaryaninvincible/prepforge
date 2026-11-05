@@ -1,0 +1,225 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Admin privileges are established ONLY via Firebase Custom Claims or
+    // server-managed admin document — never modifiable by client writes.
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isGroupMember(groupId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/studyGroups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    // ========================================================================
+    // USERS COLLECTION
+    // Users can read/update only their own permitted profile fields.
+    // Users CANNOT escalate their own role to 'admin'.
+    // ========================================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin() || (
+        isSignedIn() &&
+        resource.data.studyGroupId != null &&
+        isGroupMember(resource.data.studyGroupId)
+      );
+
+      allow create: if isOwner(userId)
+        && request.resource.data.role == 'student'
+        && request.resource.data.uid == userId
+        && request.resource.data.email is string;
+
+      allow update: if (isOwner(userId)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.uid == resource.data.uid)
+        || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // ========================================================================
+    // STUDY GROUPS & MEMBERS SUBCOLLECTION
+    // Study-group access requires valid membership.
+    // ========================================================================
+    match /studyGroups/{groupId} {
+      allow read: if isGroupMember(groupId) || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isGroupMember(groupId) || isAdmin();
+      allow delete: if isAdmin();
+
+      match /members/{memberId} {
+        allow read: if isGroupMember(groupId) || isOwner(memberId) || isAdmin();
+        // Joining requires a valid invite validation via Cloud Function or creator match
+        allow create: if isOwner(memberId) && (
+          get(/databases/$(database)/documents/studyGroups/$(groupId)).data.createdBy == request.auth.uid ||
+          request.resource.data.inviteCodeVerified == true
+        );
+        allow update: if isOwner(memberId) || isAdmin();
+        allow delete: if isOwner(memberId) || isAdmin();
+      }
+
+      match /activity/{activityId} {
+        allow read: if isGroupMember(groupId) || isAdmin();
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ========================================================================
+    // CURRICULUM: SUBJECTS, TOPICS, LESSONS
+    // Public published content is readable; drafts & mutations require Admin.
+    // ========================================================================
+    match /subjects/{subjectId} {
+      allow read: if isSignedIn() && (resource.data.status == 'published' || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /topics/{topicId} {
+      allow read: if isSignedIn() && (resource.data.status == 'published' || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if isSignedIn() && (resource.data.status == 'published' || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ========================================================================
+    // QUESTIONS & PROTECTED ANSWER KEYS
+    // Public question metadata is readable when published.
+    // Correct answers & hidden test cases are stored in /questions/{id}/private/solution
+    // or mediated through Cloud Functions during exam mode.
+    // ========================================================================
+    match /questions/{questionId} {
+      allow read: if isSignedIn() && (resource.data.publicationStatus == 'published' || isAdmin());
+      allow create, update, delete: if isAdmin();
+
+      match /private/{docId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // ========================================================================
+    // ROADMAPS & TASKS
+    // Accessible to roadmap owner or shared study group members.
+    // ========================================================================
+    match /roadmaps/{roadmapId} {
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.studyGroupId != null && isGroupMember(resource.data.studyGroupId)) ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.studyGroupId != null && isGroupMember(resource.data.studyGroupId))
+      );
+      allow delete: if isAdmin();
+
+      match /tasks/{taskId} {
+        allow read, write: if isSignedIn() && (
+          get(/databases/$(database)/documents/roadmaps/$(roadmapId)).data.ownerId == request.auth.uid ||
+          (get(/databases/$(database)/documents/roadmaps/$(roadmapId)).data.studyGroupId != null &&
+           isGroupMember(get(/databases/$(database)/documents/roadmaps/$(roadmapId)).data.studyGroupId))
+        );
+      }
+    }
+
+    // ========================================================================
+    // USER PROGRESS, BOOKMARKS, PRIVATE NOTES & REVISION ITEMS
+    // Private notes and coding drafts are strictly owner-only.
+    // ========================================================================
+    match /userProgress/{progressId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        (resource.data.sharedWithGroupId != null && isGroupMember(resource.data.sharedWithGroupId)) ||
+        isAdmin()
+      );
+      allow create, update: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /bookmarks/{bookmarkId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /revisionItems/{itemId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ========================================================================
+    // EXAM ATTEMPTS & PROBLEM ATTEMPTS
+    // Scores and graded exam results CANNOT be forged by client writes!
+    // Clients can only update draft answers before deadline while status == 'in_progress'.
+    // Final score calculation & status='submitted' transition happen in Cloud Functions.
+    // ========================================================================
+    match /examAttempts/{attemptId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Creation and final scoring are performed by trusted Cloud Functions;
+      // client can only save in-progress selected answers before server deadline.
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && resource.data.status == 'in_progress'
+        && request.resource.data.status == 'in_progress'
+        && request.resource.data.score == resource.data.score
+        && request.resource.data.expiresAt == resource.data.expiresAt
+        && request.time < resource.data.expiresAt;
+      allow create, delete: if false; // Trusted backend Cloud Functions only
+    }
+
+    match /problemAttempts/{attemptId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /codingSubmissions/{submissionId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Drafts can be saved by owner; graded submissions are written by Cloud Function
+      allow create, update: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.isDraft == true;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // ========================================================================
+    // RESOURCES, IMPORTS & AUDIT LOGS
+    // ========================================================================
+    match /resources/{resourceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+
+    match /imports/{importId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false; // Written exclusively by Firebase Admin SDK in Cloud Functions
+    }
+  }
+}

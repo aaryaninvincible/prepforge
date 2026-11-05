@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg-pure: #000000;
+    --color-surface-1: #060609;
+    --color-surface-2: #0c0c12;
+    --color-surface-3: #13131d;
+    --color-surface-card: #09090f;
+    --color-border: #1a1a26;
+    --color-border-glow: rgba(0, 242, 254, 0.25);
+  }
+
+  body {
+    background-color: #000000;
+    color: #e2e8f0;
+    font-family: 'Outfit', 'Inter', sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom AMOLED Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c1c2b;
+  border-radius: 9999px;
+  border: 1px solid #2b2b3d;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00f2fe;
+}
+
+/* Glassmorphic cards with glowing border */
+.glass-panel {
+  background: rgba(8, 8, 14, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-card-interactive {
+  background: rgba(10, 10, 16, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card-interactive:hover {
+  border-color: rgba(0, 242, 254, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 242, 254, 0.1);
+}
+
+.neon-glow-cyan {
+  box-shadow: 0 0 20px -3px rgba(0, 242, 254, 0.35);
+}
+
+.neon-glow-emerald {
+  box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.35);
+}
+
+.neon-glow-purple {
+  box-shadow: 0 0 20px -3px rgba(168, 85, 247, 0.35);
+}
+
+.neon-text-cyan {
+  text-shadow: 0 0 12px rgba(0, 242, 254, 0.6);
+}
+
+.gradient-text-primary {
+  background: linear-gradient(135deg, #ffffff 10%, #00f2fe 70%, #4facfe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-text-bhai {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #f43f5e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-text-purple {
+  background: linear-gradient(135deg, #c084fc 0%, #a855f7 50%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Grid background subtle effect */
+.cyber-grid-bg {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
